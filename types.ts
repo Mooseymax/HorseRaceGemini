@@ -1,3 +1,9 @@
+export type Weather = 'Sunny' | 'Overcast' | 'Rainy' | 'Windy';
+export type TrackCondition = 'Dry' | 'Good' | 'Wet' | 'Muddy';
+export type HorseForm = 'Excellent' | 'Good' | 'Average' | 'Poor';
+export type Pacing = 'Front Runner' | 'Mid-pack' | 'Closer';
+export type HorseArchetype = 'Sprinter' | 'Stayer' | 'Balanced' | 'All-Rounder';
+
 export interface Horse {
   id: number;
   name: string;
@@ -10,8 +16,21 @@ export interface Horse {
   sprintCharge: number; // builds up to 100 for a sprint
   acceleration: number; // how quickly it reaches max speed
   agility: number; // affects chances of stumbling
+  grit: number; // hidden stat for will to win
+  // Preferences
+  favorableWeather: Weather;
+  unfavorableWeather: Weather;
+  favorableTrack: TrackCondition;
+  unfavorableTrack: TrackCondition;
+  // Strategy
+  pacing: Pacing;
   // Race-specific state
   racesRun: number;
+}
+
+// A horse that has been selected for the next race and assigned a daily form
+export interface UpcomingHorse extends Horse {
+  form: HorseForm;
 }
 
 export interface RaceHorse extends Horse {
@@ -19,9 +38,11 @@ export interface RaceHorse extends Horse {
   currentSpeed: number;
   currentStamina: number;
   currentSprintCharge: number;
-  status: 'running' | 'sprinting' | 'stumbled' | 'finished' | 'fallen';
+  status: 'running' | 'sprinting' | 'stumbled' | 'finished' | 'fallen' | 'exhausted';
+  statusStartTime: number;
   finishTime: number | null;
   rank: number;
+  form: HorseForm;
 }
 
 export interface RaceState {
@@ -30,14 +51,23 @@ export interface RaceState {
   isFinished: boolean;
 }
 
-export interface RaceResult {
-  id: string;
-  horses: {
+export interface RaceResultHorse {
     horseId: number;
     name: string;
     finishTime: number;
-    finalPosition: number;
-  }[];
+    maxSpeed: number;
+    stamina: number;
+    agility: number;
+    grit: number;
+    pacing: Pacing;
+    form: HorseForm;
+}
+
+export interface RaceResult {
+  id: string;
+  weather: Weather;
+  trackCondition: TrackCondition;
+  horses: RaceResultHorse[];
 }
 
 export enum GameState {
