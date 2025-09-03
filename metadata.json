@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Horse Racing",
+  "description": "A modular horse racing simulation application. Features a game engine, race engine, scheduler, and stable master to manage and race horses with unique stats. The frontend visualizes the race in real-time with a dynamic leaderboard.",
+  "requestFramePermissions": []
+}
