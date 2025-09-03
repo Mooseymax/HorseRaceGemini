@@ -8,6 +8,7 @@ interface LeaderboardProps {
   gameState: GameState;
   raceResults?: RaceResult;
   upcomingHorses?: UpcomingHorse[];
+  upcomingRaceOdds?: { [horseId: number]: string };
   weather?: Weather;
   trackCondition?: TrackCondition;
 }
@@ -38,7 +39,7 @@ const PreferenceIndicator: React.FC<{horse: Horse, weather?: Weather, trackCondi
     );
 }
 
-const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResults, upcomingHorses, weather, trackCondition }) => {
+const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResults, upcomingHorses, upcomingRaceOdds, weather, trackCondition }) => {
 
   const sortedHorses = useMemo(() => {
     return [...horses].sort((a, b) => b.position - a.position);
@@ -54,6 +55,12 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResult
               {upcomingHorses.map(horse => {
                 // FOR TESTING: This should be hidden in production.
                 const formInfo = HORSE_FORMS.find(f => f.name === horse.form);
+                const odds = upcomingRaceOdds ? upcomingRaceOdds[horse.id] : null;
+                const oddsValue = odds ? parseInt(odds.split('/')[0]) / parseInt(odds.split('/')[1]) : 999;
+                
+                let oddsColor = 'bg-gray-600';
+                if (oddsValue <= 3) oddsColor = 'bg-green-600'; // Favorite
+                else if (oddsValue >= 7) oddsColor = 'bg-blue-600'; // Long shot
                 
                 return (
                   <li key={horse.id} className="flex items-center bg-gray-700/50 p-3 rounded-lg shadow-md">
@@ -61,7 +68,15 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResult
                       {horse.id}
                     </div>
                     <div className="flex-grow">
-                      <p className="font-semibold text-white">{horse.name}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        {odds && (
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold text-white ${oddsColor}`}>
+                            {odds}
+                          </span>
+                        )}
+                        <p className="font-semibold text-white truncate">{horse.name}</p>
+                      </div>
+
                       <p className="text-xs text-gray-400">
                         Spd: {horse.maxSpeed.toFixed(0)} | Sta: {horse.stamina.toFixed(0)} | Agl: {horse.agility.toFixed(0)}
                       </p>
@@ -105,7 +120,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResult
                     </div>
                   </div>
                  <span className="text-sm font-semibold">
-                    {result.finishTime ? `${(result.finishTime / 1000).toFixed(2)}s` : <span className="text-red-500">DNF</span>}
+                    {result.finishTime ? `${(result.finishTime / 1000).toFixed(2)}s` : <span className="text-red-500 font-bold">DNF</span>}
                  </span>
                </li>
             ))}

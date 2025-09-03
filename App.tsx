@@ -10,6 +10,7 @@ import WeatherDisplay from './components/WeatherDisplay';
 import { GameState } from './types';
 import type { Horse, RaceResult, Weather, TrackCondition, UpcomingHorse, HorseForm } from './types';
 import { saveRaceResults, loadRaceResults } from './services/db';
+import { calculateOdds } from './services/oddsCalculator';
 import { HORSES_IN_RACE, WEATHER_CONDITIONS, TRACK_CONDITIONS, HORSE_FORMS } from './constants';
 
 const App: React.FC = () => {
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.Waiting);
   const [currentRaceHorses, setCurrentRaceHorses] = useState<UpcomingHorse[]>([]);
   const [upcomingRaceHorses, setUpcomingRaceHorses] = useState<UpcomingHorse[]>([]);
+  const [upcomingRaceOdds, setUpcomingRaceOdds] = useState<{ [horseId: number]: string }>({});
   const [allRaceResults, setAllRaceResults] = useState<RaceResult[]>([]);
   const [weather, setWeather] = useState<Weather>('Sunny');
   const [trackCondition, setTrackCondition] = useState<TrackCondition>('Dry');
@@ -34,6 +36,7 @@ const App: React.FC = () => {
       startRace(upcomingRaceHorses, weather, trackCondition);
       setGameState(GameState.Racing);
       setUpcomingRaceHorses([]);
+      setUpcomingRaceOdds({});
     }
   }, [startRace, upcomingRaceHorses, weather, trackCondition]);
 
@@ -44,9 +47,7 @@ const App: React.FC = () => {
     if (gameState === GameState.Waiting && horses.length >= HORSES_IN_RACE && upcomingRaceHorses.length === 0) {
       const newWeather = WEATHER_CONDITIONS[Math.floor(Math.random() * WEATHER_CONDITIONS.length)];
       const newTrackCondition = TRACK_CONDITIONS[Math.floor(Math.random() * TRACK_CONDITIONS.length)];
-      setWeather(newWeather);
-      setTrackCondition(newTrackCondition);
-
+      
       const totalWeight = HORSE_FORMS.reduce((sum, form) => sum + form.weight, 0);
       const getRandomForm = (): HorseForm => {
         let random = Math.random() * totalWeight;
@@ -66,8 +67,13 @@ const App: React.FC = () => {
         ...horse,
         form: getRandomForm(),
       }));
+      
+      const odds = calculateOdds(horsesWithForm, newWeather, newTrackCondition);
 
+      setWeather(newWeather);
+      setTrackCondition(newTrackCondition);
       setUpcomingRaceHorses(horsesWithForm);
+      setUpcomingRaceOdds(odds);
     }
   }, [gameState, horses, upcomingRaceHorses]);
 
@@ -91,7 +97,11 @@ const App: React.FC = () => {
           grit: h.grit,
           pacing: h.pacing,
           form: h.form,
-        })).sort((a, b) => (a.finishTime ?? Infinity) - (b.finishTime ?? Infinity)),
+        })).sort((a, b) => {
+          if (a.finishTime === null) return 1;
+          if (b.finishTime === null) return -1;
+          return a.finishTime - b.finishTime;
+        }),
       };
 
       setAllRaceResults(prev => {
@@ -136,6 +146,7 @@ const App: React.FC = () => {
             gameState={gameState}
             raceResults={raceState.isFinished ? allRaceResults[0] : undefined}
             upcomingHorses={upcomingRaceHorses}
+            upcomingRaceOdds={upcomingRaceOdds}
             weather={weather}
             trackCondition={trackCondition}
           />

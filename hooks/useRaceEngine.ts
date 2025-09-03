@@ -16,19 +16,33 @@ export const useRaceEngine = () => {
   const raceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const raceConditionsRef = useRef<{ weather: Weather, trackCondition: TrackCondition }>({ weather: 'Sunny', trackCondition: 'Dry'});
   const announcerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastMessageTimeRef = useRef(0);
+  const lastEventMessageTimeRef = useRef(0);
+  const lastLeadChangeMessageTimeRef = useRef(0);
   const leaderRef = useRef<number | null>(null);
 
   const postAnnouncerMessage = useCallback((message: string, priority = false) => {
     const now = Date.now();
-    if (!priority && now - lastMessageTimeRef.current < 4000) return; // 4s cooldown for non-priority
+    const isLeadChange = message.includes('takes the lead!');
+
+    if (isLeadChange) {
+      if (now - lastLeadChangeMessageTimeRef.current < 5000) return; // 5s cooldown for lead changes
+    } else if (!priority) {
+      if (now - lastEventMessageTimeRef.current < 4000) return; // 4s cooldown for other events
+    }
 
     if (announcerTimeoutRef.current) {
         clearTimeout(announcerTimeoutRef.current);
     }
 
     setAnnouncerMessage(message);
-    lastMessageTimeRef.current = now;
+
+    // Update the correct cooldown timer. A lead change should not block other events.
+    if (isLeadChange) {
+        lastLeadChangeMessageTimeRef.current = now;
+    } else {
+        // Priority and non-priority events update the event timer
+        lastEventMessageTimeRef.current = now;
+    }
 
     announcerTimeoutRef.current = setTimeout(() => {
         setAnnouncerMessage('');
@@ -88,7 +102,7 @@ export const useRaceEngine = () => {
         let horsesToUpdate = [...prevState.horses];
 
         // --- "ACT OF GOD" RANDOM EVENTS ---
-        const ACT_OF_GOD_CHANCE = 0.0004; // Very rare chance per tick
+        const ACT_OF_GOD_CHANCE = 0.0016; // Increased from 0.0004 for more frequent events
         if (Math.random() < ACT_OF_GOD_CHANCE) {
           const activeHorses = horsesToUpdate.filter(h => h.status === 'running' || h.status === 'sprinting');
           if (activeHorses.length > 0) {
