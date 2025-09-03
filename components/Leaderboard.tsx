@@ -94,7 +94,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResult
                <li key={result.horseId} className="flex items-center bg-gray-700/50 p-3 rounded-lg shadow-md">
                  <span className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-gray-900 mr-3 flex-shrink-0 ${
                    index === 0 ? 'bg-yellow-400' : index === 1 ? 'bg-gray-300' : index === 2 ? 'bg-yellow-600' : 'bg-gray-500'
-                 }`}>{index + 1}</span>
+                 }`}>{result.finishTime ? index + 1 : 'DNF'}</span>
                   <div className="flex-grow">
                     <span className="font-semibold block">{result.name}</span>
                     <span className="text-xs text-gray-400">Horse #{result.horseId}</span>
@@ -104,7 +104,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResult
                       <p>Grit: {result.grit.toFixed(0)} | Form: <span className="font-semibold">{result.form}</span> | Style: <span className="font-semibold">{result.pacing}</span></p>
                     </div>
                   </div>
-                 <span className="text-sm text-gray-300">{(result.finishTime / 1000).toFixed(2)}s</span>
+                 <span className="text-sm font-semibold">
+                    {result.finishTime ? `${(result.finishTime / 1000).toFixed(2)}s` : <span className="text-red-500">DNF</span>}
+                 </span>
                </li>
             ))}
           </ul>
@@ -118,6 +120,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResult
           let statusColor = 'text-gray-400';
           if (horse.status === 'sprinting') statusColor = 'text-red-400 animate-pulse';
           if (horse.status === 'exhausted') statusColor = 'text-yellow-500';
+          if (horse.status === 'stumbled' || horse.status === 'spooked') statusColor = 'text-purple-400';
+          if (horse.status === 'fallen') statusColor = 'text-orange-500';
+          if (horse.status === 'dnf') statusColor = 'text-red-500 font-bold';
 
           return (
             <div
@@ -135,7 +140,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ horses, gameState, raceResult
                 </p>
               </div>
               <div className="text-2xl font-bold text-gray-500 w-10 text-right">
-                {index + 1}
+                {horse.status === 'dnf' ? 'DNF' : index + 1}
               </div>
             </div>
           );

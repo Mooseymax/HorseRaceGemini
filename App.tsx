@@ -75,23 +75,23 @@ const App: React.FC = () => {
     if (raceState.isFinished) {
       setGameState(GameState.Finished);
       
-      const finishedHorses = raceState.horses.filter(h => h.finishTime !== null);
+      const raceParticipants = raceState.horses;
       
       const result: RaceResult = {
         id: new Date().toISOString(),
         weather: weather,
         trackCondition: trackCondition,
-        horses: finishedHorses.map(h => ({
+        horses: raceParticipants.map(h => ({
           horseId: h.id,
           name: h.name,
-          finishTime: h.finishTime!,
+          finishTime: h.finishTime,
           maxSpeed: h.maxSpeed,
           stamina: h.stamina,
           agility: h.agility,
           grit: h.grit,
           pacing: h.pacing,
           form: h.form,
-        })).sort((a, b) => a.finishTime - b.finishTime),
+        })).sort((a, b) => (a.finishTime ?? Infinity) - (b.finishTime ?? Infinity)),
       };
 
       setAllRaceResults(prev => {
@@ -100,7 +100,7 @@ const App: React.FC = () => {
         return newResults;
       });
 
-      const updatedHorses = updateHorseStats(finishedHorses.map(h => h.id));
+      const updatedHorses = updateHorseStats(raceParticipants.map(h => h.id));
       retireAndReplenishHorses(updatedHorses);
 
       const raceFinishTimer = setTimeout(() => {

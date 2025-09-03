@@ -14,11 +14,12 @@ export const TRACK_CONDITIONS: TrackCondition[] = ['Dry', 'Good', 'Wet', 'Muddy'
 
 export const PACING_STYLES: Pacing[] = ['Front Runner', 'Mid-pack', 'Closer'];
 
+// Re-balanced multipliers to make form more impactful
 export const HORSE_FORMS: { name: HorseForm; multiplier: number; weight: number; icon: string }[] = [
-  { name: 'Excellent', multiplier: 1.025, weight: 1, icon: '🌟' },
-  { name: 'Good', multiplier: 1.01, weight: 3, icon: '😊' },
+  { name: 'Excellent', multiplier: 1.05, weight: 1, icon: '🌟' }, // Was 1.025
+  { name: 'Good', multiplier: 1.02, weight: 3, icon: '😊' },      // Was 1.01
   { name: 'Average', multiplier: 1.0, weight: 5, icon: '😐' },
-  { name: 'Poor', multiplier: 0.985, weight: 2, icon: '😟' },
+  { name: 'Poor', multiplier: 0.97, weight: 2, icon: '😟' },       // Was 0.985
 ];
 
 // Horse Name Generation

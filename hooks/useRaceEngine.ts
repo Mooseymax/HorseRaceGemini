@@ -84,24 +84,69 @@ export const useRaceEngine = () => {
         const { weather, trackCondition } = raceConditionsRef.current;
         const newTime = prevState.time + TICK_RATE;
         let finishedCount = 0;
+        let dnfCount = 0;
+        let horsesToUpdate = [...prevState.horses];
 
-        let updatedHorses = prevState.horses.map(horse => {
-          if (horse.status === 'finished' || horse.status === 'fallen') {
-            if(horse.status === 'finished') finishedCount++;
+        // --- "ACT OF GOD" RANDOM EVENTS ---
+        const ACT_OF_GOD_CHANCE = 0.0004; // Very rare chance per tick
+        if (Math.random() < ACT_OF_GOD_CHANCE) {
+          const activeHorses = horsesToUpdate.filter(h => h.status === 'running' || h.status === 'sprinting');
+          if (activeHorses.length > 0) {
+            const unluckyHorseIndex = horsesToUpdate.findIndex(h => h.id === activeHorses[Math.floor(Math.random() * activeHorses.length)].id);
+            if (unluckyHorseIndex !== -1) {
+              const unluckyHorse = horsesToUpdate[unluckyHorseIndex];
+              let eventMessage = '';
+              let newStatus: RaceHorse['status'] = 'stumbled';
+              if (trackCondition === 'Muddy') {
+                eventMessage = `${unluckyHorse.name} gets bogged down in the mud!`;
+              } else {
+                switch (weather) {
+                  case 'Rainy':
+                    eventMessage = `A crash of lightning spooks ${unluckyHorse.name}!`;
+                    newStatus = 'spooked';
+                    break;
+                  case 'Windy':
+                    eventMessage = `A huge gust of wind throws ${unluckyHorse.name} off stride!`;
+                    break;
+                  case 'Sunny':
+                    eventMessage = `${unluckyHorse.name} is blinded by a sudden sun glare!`;
+                    break;
+                  default:
+                    eventMessage = `${unluckyHorse.name} hits a patch of rough turf!`;
+                    break;
+                }
+              }
+
+              const DNF_FROM_EVENT_CHANCE = 0.20; // 20% chance an 'Act of God' event causes a DNF
+              if (Math.random() < DNF_FROM_EVENT_CHANCE) {
+                let dnfMessage = `Oh no! ${unluckyHorse.name} has been forced out of the race!`;
+                 if (weather === 'Rainy') {
+                    dnfMessage = `The lightning was too much for ${unluckyHorse.name}, who has bolted off the track!`;
+                }
+                unluckyHorse.status = 'dnf';
+                postAnnouncerMessage(dnfMessage, true);
+              } else {
+                unluckyHorse.status = newStatus;
+                unluckyHorse.statusStartTime = newTime;
+                postAnnouncerMessage(eventMessage, true);
+              }
+            }
+          }
+        }
+        
+        const sortedByPosition = [...horsesToUpdate].sort((a,b) => b.position - a.position);
+
+        let updatedHorses = horsesToUpdate.map(horse => {
+          if (horse.status === 'finished' || horse.status === 'dnf') {
+            if (horse.status === 'finished') finishedCount++;
+            if (horse.status === 'dnf') dnfCount++;
             return horse;
           }
 
           let newStatus: RaceHorse['status'] = horse.status;
           let newSpeed = horse.currentSpeed;
           let newStamina = horse.currentStamina;
-          
-          // Check for exhaustion
-          if (newStamina <= 0 && newStatus !== 'exhausted') {
-            newStatus = 'exhausted';
-            postAnnouncerMessage(`${horse.name} is exhausted!`);
-          } else if (newStamina > horse.stamina * 0.1 && newStatus === 'exhausted') {
-            newStatus = 'running'; // Can recover from exhaustion
-          }
+          const raceProgress = horse.position / TRACK_LENGTH;
 
           // --- MODIFIERS ---
           const form = HORSE_FORMS.find(f => f.name === horse.form);
@@ -109,66 +154,109 @@ export const useRaceEngine = () => {
 
           let speedModifier = 1.0;
           let agilityModifier = 1.0;
-          if (horse.favorableWeather === weather) speedModifier += 0.03;
-          if (horse.unfavorableWeather === weather) { speedModifier -= 0.03; agilityModifier -= 0.15; }
-          if (horse.favorableTrack === trackCondition) speedModifier += 0.03;
-          if (horse.unfavorableTrack === trackCondition) { speedModifier -= 0.03; agilityModifier -= 0.15; }
+          if (horse.favorableWeather === weather) speedModifier += 0.05;
+          if (horse.unfavorableWeather === weather) { speedModifier -= 0.05; agilityModifier -= 0.25; }
+          if (horse.favorableTrack === trackCondition) speedModifier += 0.05;
+          if (horse.unfavorableTrack === trackCondition) { speedModifier -= 0.05; agilityModifier -= 0.25; }
           
+          if (raceProgress > 0.85 && horse.grit > 60) {
+            const rival = prevState.horses.find(h => h.id !== horse.id && h.status !== 'finished' && Math.abs(h.position - horse.position) < 8);
+            if (rival) {
+                speedModifier += (horse.grit - 60) / 400;
+                if (Math.random() < 0.01) postAnnouncerMessage(`${horse.name} is digging deep!`);
+            }
+          }
+
           // --- TARGET SPEED & PACING ---
-          let paceTargetPercent = 0.85; // Default for Mid-pack
-          const raceProgress = horse.position / TRACK_LENGTH;
-
+          let paceTargetPercent = 0.85; 
           switch(horse.pacing) {
-            case 'Front Runner':
-              paceTargetPercent = raceProgress < 0.6 ? 0.98 : 0.80;
-              break;
-            case 'Closer':
-              paceTargetPercent = raceProgress < 0.7 ? 0.75 : 1.10; // The 1.10 encourages a final sprint
-              break;
-            case 'Mid-pack':
-              paceTargetPercent = 0.85 + (raceProgress * 0.1); // Gently ramp up
-              break;
+            case 'Front Runner': paceTargetPercent = raceProgress < 0.5 ? 1.05 : 0.75; break;
+            case 'Closer': paceTargetPercent = raceProgress < 0.75 ? 0.70 : 1.20; break;
+            case 'Mid-pack': paceTargetPercent = 0.85 + (raceProgress * 0.1); break;
           }
           
-          // Exhaustion penalty
-          if (newStatus === 'exhausted') {
-            paceTargetPercent *= 0.6; // 40% speed penalty
-          }
-          
-          const targetSpeed = horse.maxSpeed * paceTargetPercent * speedModifier * formMultiplier;
-          
-          // --- ACCELERATION ---
-          if (newSpeed < targetSpeed) {
-            newSpeed = Math.min(targetSpeed, newSpeed + horse.acceleration);
+          if (newStatus === 'exhausted') paceTargetPercent *= 0.6;
+          if (newStatus === 'stumbled') paceTargetPercent *= 0.5;
+          if (newStatus === 'spooked') paceTargetPercent *= 0.4;
+          if (newStatus === 'boxedin') paceTargetPercent *= 0.85;
+          if (newStatus === 'perfectstride') paceTargetPercent *= 1.1;
+
+          // Horse has fallen, stop it completely for a while
+          if (newStatus === 'fallen') {
+            newSpeed = 0;
           } else {
-            newSpeed = Math.max(targetSpeed, newSpeed - horse.acceleration / 2);
+            const targetSpeed = horse.maxSpeed * paceTargetPercent * speedModifier * formMultiplier;
+            if (newSpeed < targetSpeed) {
+              newSpeed = Math.min(targetSpeed, newSpeed + horse.acceleration);
+            } else {
+              newSpeed = Math.max(targetSpeed, newSpeed - horse.acceleration / 2);
+            }
           }
           
-          // --- STAMINA DRAIN/RECOVERY ---
-          const drainFactor = (newSpeed / horse.maxSpeed);
-          if (drainFactor > 0.7) {
-            newStamina -= (drainFactor * drainFactor) * 0.4; // Faster speeds drain exponentially more
-          } else {
-            newStamina += 0.15; // Recover stamina when slow
+          // --- STAMINA & DYNAMIC EVENTS ---
+          if (newStatus !== 'perfectstride') {
+              const drainFactor = (newSpeed / horse.maxSpeed);
+              if (drainFactor > 0.7) {
+                newStamina -= (drainFactor * drainFactor) * 0.4;
+              } else {
+                newStamina += 0.15;
+              }
+          }
+          
+          const surgeChance = 0.0005 + (horse.grit > 80 ? 0.001 : 0);
+          if (newStamina < horse.stamina * 0.3 && Math.random() < surgeChance) {
+              newStamina += horse.stamina * 0.25;
+              postAnnouncerMessage(`${horse.name} gets a second wind!`, true);
           }
 
-          // Grit can help resist exhaustion
-          if (newStamina < 10 && horse.grit > 75) {
-            newStamina += (horse.grit - 75) / 500;
-          }
+          if (newStamina < 10 && horse.grit > 75) newStamina += (horse.grit - 75) / 500;
           newStamina = Math.max(0, Math.min(horse.stamina, newStamina));
 
-          // --- STATUS CHANGES (STUMBLE, SPRINT) ---
-          if (newStatus === 'stumbled') {
-              newSpeed *= 0.5;
-              if (newTime > horse.statusStartTime + 2000) newStatus = 'running';
-          } else if (newStatus !== 'exhausted') { // Can't stumble or sprint if exhausted
+          if (newStamina <= 0 && newStatus !== 'exhausted') {
+            newStatus = 'exhausted';
+            postAnnouncerMessage(`${horse.name} is exhausted!`);
+          } else if (newStamina > horse.stamina * 0.1 && newStatus === 'exhausted') {
+            newStatus = 'running';
+          }
+
+          // --- STATUS CHANGES (RECOVERY & MISHAPS) ---
+          if ((newStatus === 'stumbled' || newStatus === 'perfectstride') && newTime > horse.statusStartTime + 2000) newStatus = 'running';
+          if (newStatus === 'spooked' && newTime > horse.statusStartTime + 3000) newStatus = 'running';
+          if (newStatus === 'boxedin' && newTime > horse.statusStartTime + 1500) newStatus = 'running';
+          if (newStatus === 'fallen' && newTime > horse.statusStartTime + 4000) newStatus = 'running'; // Recovery from fall
+          
+          if (newStatus === 'running') {
+              // Stumble / Fall / DNF Chain
               const effectiveAgility = horse.agility * agilityModifier;
               const stumbleChance = 0.0015 * (1 - effectiveAgility / 100);
               if (Math.random() < stumbleChance) {
-                  newStatus = 'stumbled';
-                  postAnnouncerMessage(`${horse.name} has stumbled!`, true);
+                if (Math.random() < 0.15) { // 15% of stumbles are falls
+                  newStatus = 'fallen';
                   horse.statusStartTime = newTime;
+                  postAnnouncerMessage(`${horse.name} takes a heavy fall!`, true);
+                  if (Math.random() < 0.25) { // 25% of falls are DNF
+                    newStatus = 'dnf';
+                    postAnnouncerMessage(`${horse.name} is out of the race!`, true);
+                  }
+                } else {
+                  newStatus = 'stumbled';
+                  horse.statusStartTime = newTime;
+                  postAnnouncerMessage(`${horse.name} has stumbled!`, true);
+                }
+              }
+              // Other events
+              else if (Math.random() < 0.001) {
+                  const rank = sortedByPosition.findIndex(h => h.id === horse.id) + 1;
+                  if (rank > 2 && rank < HORSES_IN_RACE - 1) {
+                      newStatus = 'boxedin';
+                      horse.statusStartTime = newTime;
+                      postAnnouncerMessage(`${horse.name} is boxed in by the pack!`);
+                  }
+              }
+              else if (Math.random() < 0.0008) {
+                  newStatus = 'perfectstride';
+                  horse.statusStartTime = newTime;
+                  postAnnouncerMessage(`${horse.name} hits a perfect stride!`);
               }
           }
           
@@ -185,13 +273,13 @@ export const useRaceEngine = () => {
           return { ...horse, position: newPosition, currentSpeed: newSpeed, currentStamina: newStamina, status: newStatus, finishTime: horse.finishTime };
         });
         
-        const sortedHorses = [...updatedHorses].sort((a,b) => b.position - a.position);
+        const currentSortedHorses = [...updatedHorses].sort((a,b) => b.position - a.position);
         updatedHorses = updatedHorses.map(h => {
-            const rank = sortedHorses.findIndex(sh => sh.id === h.id) + 1;
+            const rank = currentSortedHorses.findIndex(sh => sh.id === h.id) + 1;
             return {...h, rank};
         });
         
-        const sortedLiveHorses = updatedHorses.filter(h => h.status !== 'finished');
+        const sortedLiveHorses = updatedHorses.filter(h => h.status !== 'finished' && h.status !== 'fallen' && h.status !== 'dnf');
         if (sortedLiveHorses.length > 0) {
             const currentLeaderId = sortedLiveHorses[0].id;
             if (leaderRef.current !== currentLeaderId) {
@@ -200,7 +288,7 @@ export const useRaceEngine = () => {
             }
         }
 
-        const isRaceFinished = finishedCount === prevState.horses.length;
+        const isRaceFinished = (finishedCount + dnfCount) >= prevState.horses.length;
         if(isRaceFinished) {
             stopRace();
         }

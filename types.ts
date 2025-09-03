@@ -38,7 +38,8 @@ export interface RaceHorse extends Horse {
   currentSpeed: number;
   currentStamina: number;
   currentSprintCharge: number;
-  status: 'running' | 'sprinting' | 'stumbled' | 'finished' | 'fallen' | 'exhausted';
+  // Added 'spooked' and 'dnf' for random events and not finishing.
+  status: 'running' | 'sprinting' | 'stumbled' | 'finished' | 'fallen' | 'exhausted' | 'boxedin' | 'perfectstride' | 'spooked' | 'dnf';
   statusStartTime: number;
   finishTime: number | null;
   rank: number;
@@ -54,7 +55,7 @@ export interface RaceState {
 export interface RaceResultHorse {
     horseId: number;
     name: string;
-    finishTime: number;
+    finishTime: number | null; // Can be null for DNF
     maxSpeed: number;
     stamina: number;
     agility: number;
